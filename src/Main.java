@@ -34,7 +34,16 @@ class Main {
 // 현재 사용자가 이용중인 정보
 // 이 안의 정보는 사용자가 프로그램을 사용할 때 동안은 계속 유지된다.
 class Session {
+	private Member loginedMember;
 	private Board currentBoard;
+
+	public Member getLoginedMember() {
+		return loginedMember;
+	}
+
+	public void setLoginedMember(Member loginedMember) {
+		this.loginedMember = loginedMember;
+	}
 
 	public Board getCurrentBoard() {
 		return currentBoard;
@@ -44,6 +53,9 @@ class Session {
 		this.currentBoard = currentBoard;
 	}
 
+	public boolean isLogined() {
+		return loginedMember != null;
+	}
 }
 
 // DB 커넥션(진짜 DB와의 연결을 담당)
@@ -236,31 +248,6 @@ class DBConnection {
 			System.err.println("[닫기 오류]\n" + e.getStackTrace());
 		}
 	}
-
-	public List<Article> getArticlesByBoardCode(String code) {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	public List<Board> getBoards() {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	public Board getBoardByCode(String code) {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	public int saveBoard(Board board) {
-		// TODO Auto-generated method stub
-		return 0;
-	}
-
-	public Board getBoard(int id) {
-		// TODO Auto-generated method stub
-		return null;
-	}
 }
 
 // Factory
@@ -268,12 +255,13 @@ class DBConnection {
 
 class Factory {
 	private static Session session;
-//	private static DB db;
+	private static DB db;
 	private static DBConnection dbConnection;
 	private static BuildService buildService;
 	private static ArticleService articleService;
 	private static ArticleDao articleDao;
-
+	private static MemberService memberService;
+	private static MemberDao memberDao;
 	private static Scanner scanner;
 
 	public static DBConnection getDBConnection() {
@@ -300,6 +288,14 @@ class Factory {
 		return scanner;
 	}
 
+	public static DB getDB() {
+		if (db == null) {
+			db = new DB();
+		}
+
+		return db;
+	}
+
 	public static ArticleService getArticleService() {
 		if (articleService == null) {
 			articleService = new ArticleService();
@@ -314,6 +310,21 @@ class Factory {
 		}
 
 		return articleDao;
+	}
+
+	public static MemberService getMemberService() {
+		if (memberService == null) {
+			memberService = new MemberService();
+		}
+		return memberService;
+	}
+
+	public static MemberDao getMemberDao() {
+		if (memberDao == null) {
+			memberDao = new MemberDao();
+		}
+
+		return memberDao;
 	}
 
 	public static BuildService getBuildService() {
@@ -335,7 +346,7 @@ class App {
 		controllers = new HashMap<>();
 		controllers.put("build", new BuildController());
 		controllers.put("article", new ArticleController());
-
+		controllers.put("member", new MemberController());
 	}
 
 	public App() {
@@ -345,7 +356,7 @@ class App {
 		Factory.getDBConnection().connect();
 
 		// 관리자 회원 생성
-//		Factory.getMemberService().join("admin", "admin", "관리자");
+		Factory.getMemberService().join("admin", "admin", "관리자");
 
 		// 공지사항 게시판 생성
 		Factory.getArticleService().makeBoard("공지시항", "notice");
@@ -355,6 +366,7 @@ class App {
 		// 현재 게시판을 1번 게시판으로 선택
 		Factory.getSession().setCurrentBoard(Factory.getArticleService().getBoard(1));
 		// 임시 : 현재 로그인 된 회원은 1번 회원으로 지정, 이건 나중에 회원가입, 로그인 추가되면 제거해야함
+		Factory.getSession().setLoginedMember(Factory.getMemberService().getMember(1));
 	}
 
 	public void start() {
@@ -502,51 +514,27 @@ class ArticleController extends Controller {
 				actionDetail(id);
 			}
 		} else if (reqeust.getActionName().equals("makeboard")) {
-			actionMakeBoard(reqeust);
+			actionMakeboard(reqeust);
 		}
 	}
 
-	private void actionMakeBoard(Request request) {
-		List<Board> boards = articleService.getBoards();
-		String boardName;
-		String boardCode;
-
-		while (true) {
-			System.out.printf("생성하실 게시판 이름을 입력해 주세요:");
-			boardName = Factory.getScanner().nextLine();
-			System.out.printf("생성하실 게시판 코드를 입력해 주세요:");
-			boardCode = Factory.getScanner().nextLine();
-			if (articleService.makeBoard(boardName, boardCode) == -1) {
-				System.out.println("이미 사용중인 코드입니다.");
-				continue;
-			} else {
-				break;
-			}
-		}
-		articleService.makeBoard(boardName, boardCode);
+	private void actionMakeboard(Request reqeust) {
+		// TODO Auto-generated method stub
+		
 	}
 
 	private void actionDetail(int id) {
-
-		Article article = articleService.getArticleById(id);
-		System.out.printf("id = %d, boardId = %d, title = %s, body = %s\n", article.getId(), article.getBoardId(),
-				article.getTitle(), article.getBody());
+		// TODO Auto-generated method stub
+		
 	}
 
 	private void actionDelete(int id) {
-		articleService.delete(id);
+		// TODO Auto-generated method stub
+		
 	}
 
 	private void actionModify(int id) {
-
-		System.out.println("== 게시물 수정 ==");
-		System.out.printf("새 제목 : ");
-		String title = Factory.getScanner().nextLine();
-		System.out.printf("새 내용 : ");
-		String body = Factory.getScanner().nextLine();
-
-		articleService.modify(id, title, body);
-		System.out.println("게시물이 수정되었습니다");
+		articleService.modify(id);
 	}
 
 	private void actionList(Request reqeust) {
@@ -554,8 +542,7 @@ class ArticleController extends Controller {
 
 		System.out.println("== 게시물 리스트 시작 ==");
 		for (Article article : articles) {
-			System.out.printf("%d, %d, %s, %s\n", article.getId(), article.getBoardId(), article.getRegDate(),
-					article.getTitle());
+			System.out.printf("%d, %s, %s\n", article.getId(), article.getRegDate(), article.getTitle());
 		}
 		System.out.println("== 게시물 리스트 끝 ==");
 	}
@@ -568,10 +555,8 @@ class ArticleController extends Controller {
 
 		// 현재 게시판 id 가져오기
 		int boardId = Factory.getSession().getCurrentBoard().getId();
-		System.out.println(boardId);
 
 		// 현재 로그인한 회원의 id 가져오기
-//		int memberId = Factory.getSession().getLoginedMember().getId();
 		int newId = articleService.write(boardId, title, body);
 
 		System.out.printf("%d번 글이 생성되었습니다.\n", newId);
@@ -594,6 +579,69 @@ class BuildController extends Controller {
 
 	private void actionSite(Request reqeust) {
 		buildService.buildSite();
+	}
+}
+
+class MemberController extends Controller {
+	private MemberService memberService;
+
+	MemberController() {
+		memberService = Factory.getMemberService();
+	}
+
+	void doAction(Request reqeust) {
+		if (reqeust.getActionName().equals("logout")) {
+			actionLogout(reqeust);
+		} else if (reqeust.getActionName().equals("login")) {
+			actionLogin(reqeust);
+		} else if (reqeust.getActionName().equals("whoami")) {
+			actionWhoami(reqeust);
+		} else if (reqeust.getActionName().equals("join")) {
+			actionJoin(reqeust);
+		}
+	}
+
+	private void actionJoin(Request reqeust) {
+
+	}
+
+	private void actionWhoami(Request reqeust) {
+		Member loginedMember = Factory.getSession().getLoginedMember();
+
+		if (loginedMember == null) {
+			System.out.println("나그네");
+		} else {
+			System.out.println(loginedMember.getName());
+		}
+
+	}
+
+	private void actionLogin(Request reqeust) {
+		System.out.printf("로그인 아이디 : ");
+		String loginId = Factory.getScanner().nextLine().trim();
+
+		System.out.printf("로그인 비번 : ");
+		String loginPw = Factory.getScanner().nextLine().trim();
+
+		Member member = memberService.getMemberByLoginIdAndLoginPw(loginId, loginPw);
+
+		if (member == null) {
+			System.out.println("일치하는 회원이 없습니다.");
+		} else {
+			System.out.println(member.getName() + "님 환영합니다.");
+			Factory.getSession().setLoginedMember(member);
+		}
+	}
+
+	private void actionLogout(Request reqeust) {
+		Member loginedMember = Factory.getSession().getLoginedMember();
+
+		if (loginedMember != null) {
+			Session session = Factory.getSession();
+			System.out.println("로그아웃 되었습니다.");
+			session.setLoginedMember(null);
+		}
+
 	}
 }
 
@@ -665,21 +713,8 @@ class ArticleService {
 		articleDao = Factory.getArticleDao();
 	}
 
-//	public void detail(int id) {
-//		articleDao.detail(id);
-//	}
-
-	public void delete(int id) {
-		articleDao.delete(id);
-	}
-
-	public Article getArticleById(int id) {
-
-		return articleDao.getArticleById(id);
-	}
-
-	public void modify(int id, String title, String body) {
-		articleDao.modify(id, title, body);
+	public void modify(int id) {
+		articleDao.modify(id);
 	}
 
 	public List<Article> getArticlesByBoardCode(String code) {
@@ -699,7 +734,7 @@ class ArticleService {
 
 		Board board = new Board(name, code);
 		return articleDao.saveBoard(board);
-		}
+	}
 
 	public Board getBoard(int id) {
 		return articleDao.getBoard(id);
@@ -716,57 +751,62 @@ class ArticleService {
 
 }
 
+class MemberService {
+	private MemberDao memberDao;
+
+	MemberService() {
+		memberDao = Factory.getMemberDao();
+	}
+
+	public Member getMemberByLoginIdAndLoginPw(String loginId, String loginPw) {
+		return memberDao.getMemberByLoginIdAndLoginPw(loginId, loginPw);
+	}
+
+	public int join(String loginId, String loginPw, String name) {
+		Member oldMember = memberDao.getMemberByLoginId(loginId);
+
+		if (oldMember != null) {
+			return -1;
+		}
+
+		Member member = new Member(loginId, loginPw, name);
+		return memberDao.save(member);
+	}
+
+	public Member getMember(int id) {
+		return memberDao.getMember(id);
+	}
+}
+
 // Dao
 class ArticleDao {
-
+	DB db;
 	DBConnection dbConnection;
 
 	ArticleDao() {
-
+		db = Factory.getDB(); // 나중에 없어질
 		dbConnection = Factory.getDBConnection();
 	}
 
-	public void modify(int id, String title, String body) {
+	public void modify(int id) {
 		// TODO Auto-generated method stub
-
-	}
-
-	public void delete(int id) {
-		// TODO Auto-generated method stub
-
-	}
-
-	public Article getArticleById(int id) {
-		// TODO Auto-generated method stub
-		return null;
+		
 	}
 
 	public List<Article> getArticlesByBoardCode(String code) {
-		return dbConnection.getArticlesByBoardCode(code);
+		return db.getArticlesByBoardCode(code);
 	}
 
 	public List<Board> getBoards() {
-		List<Map<String, Object>> rows = dbConnection.selectRows("SELECT * FROM board ORDER by id DESC");
-		List<Board> boards = new ArrayList<>();
-
-		for (Map<String, Object> row : rows) {
-			boards.add(new Board(row));
-		}
-
-		return boards;
+		return db.getBoards();
 	}
 
 	public Board getBoardByCode(String code) {
-		return dbConnection.getBoardByCode(code);
+		return db.getBoardByCode(code);
 	}
 
 	public int saveBoard(Board board) {
-		String sql = "";
-		sql += "INSERT INTO board ";
-		sql += String.format("SET `name` = '%s'", board.getName());
-		sql += String.format(", regDate = '%s'", board.getRegDate());
-		sql += String.format(", `code` = '%s';", board.getCode());
-		return dbConnection.insert(sql);
+		return db.saveBoard(board);
 	}
 
 	public int save(Article article) {
@@ -781,7 +821,7 @@ class ArticleDao {
 	}
 
 	public Board getBoard(int id) {
-		return dbConnection.getBoard(id);
+		return db.getBoard(id);
 	}
 
 	public List<Article> getArticles() {
@@ -799,6 +839,232 @@ class ArticleDao {
 
 }
 
+class MemberDao {
+	DB db;
+
+	MemberDao() {
+		db = Factory.getDB();
+	}
+
+	public Member getMemberByLoginIdAndLoginPw(String loginId, String loginPw) {
+		return db.getMemberByLoginIdAndLoginPw(loginId, loginPw);
+	}
+
+	public Member getMemberByLoginId(String loginId) {
+		return db.getMemberByLoginId(loginId);
+	}
+
+	public Member getMember(int id) {
+		return db.getMember(id);
+	}
+
+	public int save(Member member) {
+		return db.saveMember(member);
+	}
+}
+
+// DB
+class DB {
+	private Map<String, Table> tables;
+
+	public DB() {
+		String dbDirPath = getDirPath();
+		Util.makeDir(dbDirPath);
+
+		tables = new HashMap<>();
+
+		tables.put("article", new Table<Article>(Article.class, dbDirPath));
+		tables.put("board", new Table<Board>(Board.class, dbDirPath));
+		tables.put("member", new Table<Member>(Member.class, dbDirPath));
+	}
+
+	public List<Article> getArticlesByBoardCode(String code) {
+		Board board = getBoardByCode(code);
+		// free => 2
+		// notice => 1
+
+		List<Article> articles = getArticles();
+		List<Article> newArticles = new ArrayList<>();
+
+		for (Article article : articles) {
+			if (article.getBoardId() == board.getId()) {
+				newArticles.add(article);
+			}
+		}
+
+		return newArticles;
+	}
+
+	public Member getMemberByLoginIdAndLoginPw(String loginId, String loginPw) {
+		List<Member> members = getMembers();
+
+		for (Member member : members) {
+			if (member.getLoginId().equals(loginId) && member.getLoginPw().equals(loginPw)) {
+				return member;
+			}
+		}
+
+		return null;
+	}
+
+	public Member getMemberByLoginId(String loginId) {
+		List<Member> members = getMembers();
+
+		for (Member member : members) {
+			if (member.getLoginId().equals(loginId)) {
+				return member;
+			}
+		}
+
+		return null;
+	}
+
+	public List<Member> getMembers() {
+		return tables.get("member").getRows();
+	}
+
+	public Board getBoardByCode(String code) {
+		List<Board> boards = getBoards();
+
+		for (Board board : boards) {
+			if (board.getCode().equals(code)) {
+				return board;
+			}
+		}
+
+		return null;
+	}
+
+	public List<Board> getBoards() {
+		return tables.get("board").getRows();
+	}
+
+	public Member getMember(int id) {
+		return (Member) tables.get("member").getRow(id);
+	}
+
+	public int saveBoard(Board board) {
+		return tables.get("board").saveRow(board);
+	}
+
+	public String getDirPath() {
+		return "db";
+	}
+
+	public int saveMember(Member member) {
+		return tables.get("member").saveRow(member);
+	}
+
+	public Board getBoard(int id) {
+		return (Board) tables.get("board").getRow(id);
+	}
+
+	public List<Article> getArticles() {
+		return tables.get("article").getRows();
+	}
+
+	public int saveArticle(Article article) {
+		return tables.get("article").saveRow(article);
+	}
+
+	public void backup() {
+		for (String tableName : tables.keySet()) {
+			Table table = tables.get(tableName);
+			table.backup();
+		}
+	}
+}
+
+// Table
+class Table<T> {
+	private Class<T> dataCls;
+	private String tableName;
+	private String tableDirPath;
+
+	public Table(Class<T> dataCls, String dbDirPath) {
+		this.dataCls = dataCls;
+		this.tableName = Util.lcfirst(dataCls.getCanonicalName());
+		this.tableDirPath = dbDirPath + "/" + this.tableName;
+
+		Util.makeDir(tableDirPath);
+	}
+
+	private String getTableName() {
+		return tableName;
+	}
+
+	public int saveRow(T data) {
+		Dto dto = (Dto) data;
+
+		if (dto.getId() == 0) {
+			int lastId = getLastId();
+			int newId = lastId + 1;
+			dto.setId(newId);
+			setLastId(newId);
+		}
+
+		String rowFilePath = getRowFilePath(dto.getId());
+
+		Util.writeJsonFile(rowFilePath, data);
+
+		return dto.getId();
+	};
+
+	private String getRowFilePath(int id) {
+		return tableDirPath + "/" + id + ".json";
+	}
+
+	private void setLastId(int lastId) {
+		String filePath = getLastIdFilePath();
+		Util.writeFileContents(filePath, lastId);
+	}
+
+	private int getLastId() {
+		String filePath = getLastIdFilePath();
+
+		if (Util.isFileExists(filePath) == false) {
+			int lastId = 0;
+			Util.writeFileContents(filePath, lastId);
+			return lastId;
+		}
+
+		return Integer.parseInt(Util.getFileContents(filePath));
+	}
+
+	private String getLastIdFilePath() {
+		return this.tableDirPath + "/lastId.txt";
+	}
+
+	public T getRow(int id) {
+		return (T) Util.getObjectFromJson(getRowFilePath(id), dataCls);
+	}
+
+	public void backup() {
+
+	}
+
+	void delete(int id) {
+		/* 구현 */
+	};
+
+	List<T> getRows() {
+		int lastId = getLastId();
+
+		List<T> rows = new ArrayList<>();
+
+		for (int id = 1; id <= lastId; id++) {
+			T row = getRow(id);
+
+			if (row != null) {
+				rows.add(row);
+			}
+		}
+
+		return rows;
+	};
+}
+
+// DTO
 abstract class Dto {
 	private int id;
 	private String regDate;
@@ -837,21 +1103,12 @@ class Board extends Dto {
 	private String name;
 	private String code;
 
-	@Override
-	public String toString() {
-		return String.format("%n번호 : %s%n 이름 : %s%n 코드 : %s%n", getId(), name, code);
-	}
-
 	public Board() {
 	}
 
 	public Board(String name, String code) {
 		this.name = name;
 		this.code = code;
-	}
-
-	public Board(Map<String, Object> row) {
-		// TODO Auto-generated constructor stub
 	}
 
 	public String getName() {
@@ -869,33 +1126,34 @@ class Board extends Dto {
 	public void setCode(String code) {
 		this.code = code;
 	}
+
 }
 
 class Article extends Dto {
 	private int boardId;
+	private int memberId;
 	private String title;
 	private String body;
-	private int hit;
-	private int like;
+
+	public Article() {
+
+	}
 
 	public Article(int boardId, String title, String body) {
-
-	}
-
-	@Override
-	public String toString() {
-		return String.format("%n게시판 번호 : %s 게시 번호 : %s 게시 날짜 : %s%n제목 : %s%n내용 : %s%n%n ", boardId, getId(),
-				getRegDate(), title, body);
-	}
-
-	public Article(int boardId, int memberId, String title, String body) {
 		this.boardId = boardId;
 		this.title = title;
 		this.body = body;
 	}
 
 	public Article(Map<String, Object> row) {
-		// TODO Auto-generated constructor stub
+		this.setId((int) (long) row.get("id"));
+
+		String regDate = row.get("regDate") + "";
+		this.setRegDate(regDate);
+		this.setTitle((String) row.get("title"));
+		this.setBody((String) row.get("body"));
+		this.setMemberId((int) (long) row.get("memberId"));
+		this.setBoardId((int) (long) row.get("boardId"));
 	}
 
 	public int getBoardId() {
@@ -904,6 +1162,14 @@ class Article extends Dto {
 
 	public void setBoardId(int boardId) {
 		this.boardId = boardId;
+	}
+
+	public int getMemberId() {
+		return memberId;
+	}
+
+	public void setMemberId(int memberId) {
+		this.memberId = memberId;
 	}
 
 	public String getTitle() {
@@ -922,30 +1188,88 @@ class Article extends Dto {
 		this.body = body;
 	}
 
-	public int getHit() {
-		return hit;
+	@Override
+	public String toString() {
+		return "Article [boardId=" + boardId + ", memberId=" + memberId + ", title=" + title + ", body=" + body
+				+ ", getId()=" + getId() + ", getRegDate()=" + getRegDate() + "]";
 	}
 
-	public void setHit(int hit) {
-		this.hit = hit;
+}
+
+class ArticleReply extends Dto {
+	private int id;
+	private String regDate;
+	private int articleId;
+	private int memberId;
+	private String body;
+
+	ArticleReply() {
+
 	}
 
-	public int getLike() {
-		return like;
+	public int getArticleId() {
+		return articleId;
 	}
 
-	public void setLike(int like) {
-		this.like = like;
+	public void setArticleId(int articleId) {
+		this.articleId = articleId;
 	}
 
-	public Article getArticleById(int id) {
-		// TODO Auto-generated method stub
-		return null;
+	public int getMemberId() {
+		return memberId;
 	}
 
-	public void delete(int id) {
-		// TODO Auto-generated method stub
+	public void setMemberId(int memberId) {
+		this.memberId = memberId;
+	}
 
+	public String getBody() {
+		return body;
+	}
+
+	public void setBody(String body) {
+		this.body = body;
+	}
+
+}
+
+class Member extends Dto {
+	private String loginId;
+	private String loginPw;
+	private String name;
+
+	public Member() {
+
+	}
+
+	public Member(String loginId, String loginPw, String name) {
+		this.loginId = loginId;
+		this.loginPw = loginPw;
+		this.name = name;
+	}
+
+	public String getLoginId() {
+		return loginId;
+	}
+
+	public void setLoginId(String loginId) {
+		this.loginId = loginId;
+	}
+
+	public String getLoginPw() {
+		return loginPw;
+	}
+
+	public void setLoginPw(String loginPw) {
+		this.loginPw = loginPw;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	public void setName(String name) {
+		this.name = name;
 	}
 }
 
