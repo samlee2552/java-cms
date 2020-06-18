@@ -10,6 +10,7 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -62,6 +63,21 @@ class Session {
 class DBConnection {
 	private Connection connection;
 
+	public int delete(String sql) {
+		int affectedRows = 0;
+
+		Statement stmt;
+		try {
+			stmt = connection.createStatement();
+			affectedRows = stmt.executeUpdate(sql);
+		} catch (SQLException e) {
+			System.err.printf("[SQL 예외, SQL : %s] : %s\n", sql, e.getMessage());
+		}
+
+		return affectedRows;
+	}
+	
+	
 	public void connect() {
 		String url = "jdbc:mysql://localhost:3306/site5?serverTimezone=UTC";
 		String user = "sbsst";
@@ -101,7 +117,6 @@ class DBConnection {
 				return (int) value;
 			}
 		}
-
 		return -1;
 	}
 
@@ -126,55 +141,45 @@ class DBConnection {
 	public Map<String, Object> selectRow(String sql) {
 		List<Map<String, Object>> rows = selectRows(sql);
 
-		if (rows.size() > 0) {
-			return rows.get(0);
+		if (rows.size() == 0) {
+			return new HashMap<String, Object>();
 		}
 
-		return new HashMap<>();
+		return rows.get(0);
 	}
 
 	public List<Map<String, Object>> selectRows(String sql) {
-		// SQL을 적는 문서파일
-		Statement statement = null;
-		ResultSet rs = null;
-
 		List<Map<String, Object>> rows = new ArrayList<>();
 
 		try {
-			statement = connection.createStatement();
-			rs = statement.executeQuery(sql);
-			// ResultSet 의 MetaData를 가져온다.
+			Statement stmt = connection.createStatement();
+			ResultSet rs = stmt.executeQuery(sql);
 			ResultSetMetaData metaData = rs.getMetaData();
-			// ResultSet 의 Column의 갯수를 가져온다.
 			int columnSize = metaData.getColumnCount();
 
-			// rs의 내용을 돌려준다.
 			while (rs.next()) {
-				// 내부에서 map을 초기화
 				Map<String, Object> row = new HashMap<>();
 
 				for (int columnIndex = 0; columnIndex < columnSize; columnIndex++) {
 					String columnName = metaData.getColumnName(columnIndex + 1);
-					// map에 값을 입력 map.put(columnName, columnName으로 getString)
-					row.put(columnName, rs.getObject(columnName));
+					Object value = rs.getObject(columnName);
+
+					if (value instanceof Long) {
+						int numValue = (int) (long) value;
+						row.put(columnName, numValue);
+					} else if (value instanceof Timestamp) {
+						String dateValue = value.toString();
+						dateValue = dateValue.substring(0, dateValue.length() - 2);
+						row.put(columnName, dateValue);
+					} else {
+						row.put(columnName, value);
+					}
 				}
-				// list에 저장
+
 				rows.add(row);
 			}
 		} catch (SQLException e) {
-			System.err.printf("[SELECT 쿼리 오류, %s]\n" + e.getStackTrace() + "\n", sql);
-		}
-
-		try {
-			if (statement != null) {
-				statement.close();
-			}
-
-			if (rs != null) {
-				rs.close();
-			}
-		} catch (SQLException e) {
-			System.err.println("[SELECT 종료 오류]\n" + e.getStackTrace());
+			System.err.printf("[SQL 예외, SQL : %s] : %s\n", sql, e.getMessage());
 		}
 
 		return rows;
@@ -514,27 +519,44 @@ class ArticleController extends Controller {
 				actionDetail(id);
 			}
 		} else if (reqeust.getActionName().equals("makeboard")) {
-			actionMakeboard(reqeust);
+			actionMakeboard();
 		}
 	}
 
-	private void actionMakeboard(Request reqeust) {
-		// TODO Auto-generated method stub
-		
+	private void actionMakeboard() {
+		System.out.println("게시판 생성");
+		System.out.printf("게시판 이름 : ");
+		String name = Factory.getScanner().nextLine();
+		System.out.printf("내용 : ");
+		String code = Factory.getScanner().nextLine();
+
+		// 현재 게시판 id 가져오기
+		int boardId = Factory.getSession().getCurrentBoard().getId();
+
+		// 현재 로그인한 회원의 id 가져오기
+		int newBoard = articleService.makeBoard(name, code);
+
+		System.out.printf("%s 게시판이 생성되었습니다.\n", name);
+//		articleService.makeBoard(name, code);
 	}
 
 	private void actionDetail(int id) {
-		// TODO Auto-generated method stub
-		
+		Article article = articleService.detail(id);
+		System.out.printf("id = %d, boardId = %d, title = %s, body = %s%n", article.getId(), article.getBoardId(), article.getTitle(), article.getBody());
 	}
 
 	private void actionDelete(int id) {
-		// TODO Auto-generated method stub
-		
+		articleService.delete(id);
 	}
 
 	private void actionModify(int id) {
-		articleService.modify(id);
+		System.out.println("== 게시물 수정 ==");
+		System.out.printf("새 제목 : ");
+		String title = Factory.getScanner().nextLine();
+		System.out.printf("새 내용 : ");
+		String body = Factory.getScanner().nextLine();
+		
+		articleService.modify(id, title, body);
 	}
 
 	private void actionList(Request reqeust) {
@@ -542,7 +564,7 @@ class ArticleController extends Controller {
 
 		System.out.println("== 게시물 리스트 시작 ==");
 		for (Article article : articles) {
-			System.out.printf("%d, %s, %s\n", article.getId(), article.getRegDate(), article.getTitle());
+			System.out.printf("%d, %d, %s, %s\n", article.getId(), article.getBoardId(), article.getRegDate(), article.getTitle());
 		}
 		System.out.println("== 게시물 리스트 끝 ==");
 	}
@@ -559,7 +581,7 @@ class ArticleController extends Controller {
 		// 현재 로그인한 회원의 id 가져오기
 		int newId = articleService.write(boardId, title, body);
 
-		System.out.printf("%d번 글이 생성되었습니다.\n", newId);
+//		System.out.printf("%d번 글이 생성되었습니다.\n", newId);
 	}
 }
 
@@ -713,9 +735,22 @@ class ArticleService {
 		articleDao = Factory.getArticleDao();
 	}
 
-	public void modify(int id) {
-		articleDao.modify(id);
+	public Article detail(int id) {
+		return articleDao.detail(id);
 	}
+
+	public void delete(int id) {
+		articleDao.delete(id);
+	}
+
+	public void modify(int id, String title, String body) {
+		articleDao.modify(id, title, body);
+	}
+
+	public void getArticleById(int id) {
+		articleDao.getArticleById(id);
+	}
+
 
 	public List<Article> getArticlesByBoardCode(String code) {
 		return articleDao.getArticlesByBoardCode(code);
@@ -788,9 +823,36 @@ class ArticleDao {
 		dbConnection = Factory.getDBConnection();
 	}
 
-	public void modify(int id) {
-		// TODO Auto-generated method stub
+	public Article detail(int id) {
 		
+		return getArticleById(id);
+	}
+
+	public void delete(int id) {
+		String sql = "";
+		sql += "DELETE FROM article ";
+		sql += "WHERE id = " + id + ";";
+		dbConnection.delete(sql);
+		System.out.println("게시물이 삭제되었습니다");
+	}
+
+	public Article getArticleById(int id) {
+		String sql = "SELECT * FROM article WHERE id = " + id + ";";
+		Map<String, Object> row = dbConnection.selectRow(sql);
+		Article article = new Article(row);
+
+		return article;
+	}
+
+	public void modify(int id, String title, String body) {
+		
+		String sql = "UPDATE article ";
+		sql += String.format("SET title = '%s'", title);
+		sql += String.format(" , `body` = '%s'", body);
+		sql += String.format(" WHERE id = %d;", id);
+
+		dbConnection.update(sql);
+		System.out.println("게시물이 수정되었습니다");
 	}
 
 	public List<Article> getArticlesByBoardCode(String code) {
@@ -825,7 +887,8 @@ class ArticleDao {
 	}
 
 	public List<Article> getArticles() {
-		List<Map<String, Object>> rows = dbConnection.selectRows("SELECT * FROM article ORDER by id DESC");
+		String sql = "SELECT * FROM article ORDER by id DESC;\"";
+		List<Map<String, Object>> rows = dbConnection.selectRows("SELECT * FROM article ORDER by id DESC;");
 		List<Article> articles = new ArrayList<>();
 
 		for (Map<String, Object> row : rows) {
@@ -1146,14 +1209,13 @@ class Article extends Dto {
 	}
 
 	public Article(Map<String, Object> row) {
-		this.setId((int) (long) row.get("id"));
+		this.setId((int) row.get("id"));
 
 		String regDate = row.get("regDate") + "";
 		this.setRegDate(regDate);
 		this.setTitle((String) row.get("title"));
 		this.setBody((String) row.get("body"));
-		this.setMemberId((int) (long) row.get("memberId"));
-		this.setBoardId((int) (long) row.get("boardId"));
+		this.setBoardId((int) row.get("boardId"));
 	}
 
 	public int getBoardId() {
